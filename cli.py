@@ -2,14 +2,15 @@ import textwrap
 from application import ToDoManager
 
 
-# ===== CLI =====
 def short(p): return f"{p.id[:8]} - {p.name}"
+
 
 def print_project(p):
     print(f"\nProject: {p.name} (id: {p.id})")
     if p.description:
         print(f"  Description: {p.description}")
     print(f"  Number of tasks: {len(p.tasks)}\n")
+
 
 def print_task(t):
     dl = t.deadline.isoformat() if t.deadline else "—"
@@ -19,6 +20,7 @@ def print_task(t):
     if t.description:
         print(f"    Description: {t.description}")
     print("")
+
 
 class CLI:
     def __init__(self):
@@ -51,9 +53,11 @@ class CLI:
           project create
           project list
           project show <project_id>
+          project edit <project_id>
           project delete <project_id>
           task add <project_id>
           task list <project_id>
+          task edit <project_id> <task_id>
           task status <project_id> <task_id> <todo|doing|done>
           task delete <project_id> <task_id>
           exit
@@ -96,6 +100,15 @@ class CLI:
             print_project(p)
             for t in p.tasks.values():
                 print_task(t)
+        elif sub == "edit":
+            if len(args) < 2:
+                print("Usage: project edit <id>")
+                return
+            pid = args[1]
+            new_name = input("New name (press Enter to keep current): ").strip() or None
+            new_desc = input("New description (press Enter to keep current): ").strip() or None
+            p = self.mgr.edit_project(pid, new_name, new_desc)
+            print(f"Project updated: {p.name}")
         elif sub == "delete":
             if len(args) < 2:
                 print("Usage: project delete <id>")
@@ -134,6 +147,17 @@ class CLI:
                 return
             for t in tasks:
                 print_task(t)
+        elif sub == "edit":
+            if len(args) < 3:
+                print("Usage: task edit <project_id> <task_id>")
+                return
+            pid, tid = args[1], args[2]
+            new_title = input("New title (press Enter to keep current): ").strip() or None
+            new_desc = input("New description (press Enter to keep current): ").strip() or None
+            new_status = input("New status (todo/doing/done, press Enter to keep current): ").strip() or None
+            new_deadline = input("New deadline (YYYY-MM-DD, press Enter to keep current): ").strip() or None
+            t = self.mgr.edit_task(pid, tid, title=new_title, description=new_desc, status=new_status, deadline_str=new_deadline)
+            print(f"Task updated: {t.title}")
         elif sub == "status":
             if len(args) < 4:
                 print("Usage: task status <project_id> <task_id> <status>")
