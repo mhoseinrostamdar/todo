@@ -1,5 +1,8 @@
 import textwrap
-from application import ToDoManager
+from app.db.session import get_db
+from app.repositories import ProjectRepository, TaskRepository
+from app.services import ProjectService, TaskService
+from app.exceptions import ToDoAppError
 
 
 def short(p): return f"{p.id[:8]} - {p.name}"
@@ -9,7 +12,7 @@ def print_project(p):
     print(f"\nProject: {p.name} (id: {p.id})")
     if p.description:
         print(f"  Description: {p.description}")
-    print(f"  Number of tasks: {len(p.tasks)}\n")
+    print(f"  Number of tasks: {len(p.tasks) if hasattr(p, 'tasks') else 'N/A'}\n")
 
 
 def print_task(t):
@@ -24,10 +27,18 @@ def print_task(t):
 
 class CLI:
     def __init__(self):
-        self.mgr = ToDoManager()
+        self.db = get_db()
+        project_repo = ProjectRepository(self.db)
+        task_repo = TaskRepository(self.db)
+        self.project_service = ProjectService(project_repo)
+        self.task_service = TaskService(task_repo, project_repo)
+
+    def __del__(self):
+        if hasattr(self, 'db'):
+            self.db.close()
 
     def run(self):
-        print("Welcome to ToDoList CLI (Phase 1 - In-Memory)")
+        print("Welcome to ToDoList CLI (Phase 2 - RDB)")
         print("Type 'help' for available commands.")
         while True:
             try:
@@ -44,8 +55,10 @@ class CLI:
             except KeyboardInterrupt:
                 print("\nInterrupted. Exiting.")
                 break
-            except Exception as e:
+            except ToDoAppError as e:
                 print(f"Error: {e}")
+            except Exception as e:
+                print(f"Unexpected error: {e}")
 
     def print_help(self):
         print(textwrap.dedent("""
@@ -77,103 +90,108 @@ class CLI:
             print("Incomplete command.")
             return
         sub = args[0]
-        if sub == "create":
-            name = input("Project name: ").strip()
-            desc = input("Description (optional): ").strip()
-            p = self.mgr.create_project(name, desc)
-            print(f"Project created: {short(p)}")
-        elif sub == "list":
-            projects = self.mgr.list_projects()
-            if not projects:
-                print("No projects found.")
-                return
-            for p in projects:
+        try:
+            if sub == "create":
+                name = input("Project name: ").strip()
+                desc = input("Description (optional): ").strip()
+                p = self.project_service.create_project(name, desc)
+                print(f"Project created: {short(p)}")
+            elif sub == "list":
+                projects = self.project_service.list_projects()
+                if not projects:
+                    print("No projects found.")
+                    return
+                for p in projects:
+                    print_project(p)
+            elif sub == "show":
+                if len(args) < 2:
+                    print("Usage: project show <id>")
+                    return
+                p = self.project_service.get_project(args[1])
                 print_project(p)
-        elif sub == "show":
-            if len(args) < 2:
-                print("Usage: project show <id>")
-                return
-            p = self.mgr.storage.get_project(args[1])
-            if not p:
-                print("Project not found.")
-                return
-            print_project(p)
-            for t in p.tasks.values():
-                print_task(t)
-        elif sub == "edit":
-            if len(args) < 2:
-                print("Usage: project edit <id>")
-                return
-            pid = args[1]
-            new_name = input("New name (press Enter to keep current): ").strip() or None
-            new_desc = input("New description (press Enter to keep current): ").strip() or None
-            p = self.mgr.edit_project(pid, new_name, new_desc)
-            print(f"Project updated: {p.name}")
-        elif sub == "delete":
-            if len(args) < 2:
-                print("Usage: project delete <id>")
-                return
-            pid = args[1]
-            confirm = input("Delete this project and all tasks? (y/N): ").lower()
-            if confirm == "y":
-                self.mgr.delete_project(pid)
-                print("Project deleted.")
-        else:
-            print("Unknown project command.")
+                tasks = self.task_service.list_tasks_by_project(p.id)
+                for t in tasks:
+                    print_task(t)
+            elif sub == "edit":
+                if len(args) < 2:
+                    print("Usage: project edit <id>")
+                    return
+                pid = args[1]
+                new_name = input("New name (press Enter to keep current): ").strip() or None
+                new_desc = input("New description (press Enter to keep current): ").strip() or None
+                p = self.project_service.update_project(pid, new_name, new_desc)
+                print(f"Project updated: {p.name}")
+            elif sub == "delete":
+                if len(args) < 2:
+                    print("Usage: project delete <id>")
+                    return
+                pid = args[1]
+                confirm = input("Delete this project and all tasks? (y/N): ").lower()
+                if confirm == "y":
+                    self.project_service.delete_project(pid)
+                    print("Project deleted.")
+            else:
+                print("Unknown project command.")
+        except ToDoAppError as e:
+            print(f"Error: {e}")
 
     def handle_task(self, args):
         if not args:
             print("Incomplete command.")
             return
         sub = args[0]
-        if sub == "add":
-            if len(args) < 2:
-                print("Usage: task add <project_id>")
-                return
-            pid = args[1]
-            title = input("Task title: ").strip()
-            desc = input("Description (optional): ").strip()
-            deadline = input("Deadline (YYYY-MM-DD): ").strip()
-            status = input("Initial status (todo/doing/done): ").strip() or None
-            t = self.mgr.add_task(pid, title, desc, status, deadline or None)
-            print(f"Task created: {t.id[:8]} - {t.title}")
-        elif sub == "list":
-            if len(args) < 2:
-                print("Usage: task list <project_id>")
-                return
-            tasks = self.mgr.list_tasks_of_project(args[1])
-            if not tasks:
-                print("No tasks found.")
-                return
-            for t in tasks:
-                print_task(t)
-        elif sub == "edit":
-            if len(args) < 3:
-                print("Usage: task edit <project_id> <task_id>")
-                return
-            pid, tid = args[1], args[2]
-            new_title = input("New title (press Enter to keep current): ").strip() or None
-            new_desc = input("New description (press Enter to keep current): ").strip() or None
-            new_status = input("New status (todo/doing/done, press Enter to keep current): ").strip() or None
-            new_deadline = input("New deadline (YYYY-MM-DD, press Enter to keep current): ").strip() or None
-            t = self.mgr.edit_task(pid, tid, title=new_title, description=new_desc, status=new_status, deadline_str=new_deadline)
-            print(f"Task updated: {t.title}")
-        elif sub == "status":
-            if len(args) < 4:
-                print("Usage: task status <project_id> <task_id> <status>")
-                return
-            self.mgr.change_task_status(args[1], args[2], args[3])
-            print("Task status changed.")
-        elif sub == "delete":
-            if len(args) < 3:
-                print("Usage: task delete <project_id> <task_id>")
-                return
-            confirm = input("Are you sure? (y/N): ").lower()
-            if confirm == "y":
-                self.mgr.delete_task(args[1], args[2])
-                print("Task deleted.")
-        else:
-            print("Unknown task command.")
+        try:
+            if sub == "add":
+                if len(args) < 2:
+                    print("Usage: task add <project_id>")
+                    return
+                pid = args[1]
+                title = input("Task title: ").strip()
+                desc = input("Description (optional): ").strip()
+                deadline = input("Deadline (YYYY-MM-DD): ").strip()
+                status = input("Initial status (todo/doing/done): ").strip() or "todo"
+                t = self.task_service.create_task(pid, title, desc, status, deadline or None)
+                print(f"Task created: {t.id[:8]} - {t.title}")
+            elif sub == "list":
+                if len(args) < 2:
+                    print("Usage: task list <project_id>")
+                    return
+                tasks = self.task_service.list_tasks_by_project(args[1])
+                if not tasks:
+                    print("No tasks found.")
+                    return
+                for t in tasks:
+                    print_task(t)
+            elif sub == "edit":
+                if len(args) < 3:
+                    print("Usage: task edit <project_id> <task_id>")
+                    return
+                tid = args[2]
+                new_title = input("New title (press Enter to keep current): ").strip() or None
+                new_desc = input("New description (press Enter to keep current): ").strip() or None
+                new_status = input("New status (todo/doing/done, press Enter to keep current): ").strip() or None
+                new_deadline = input("New deadline (YYYY-MM-DD, press Enter to keep current): ").strip() or None
+                t = self.task_service.update_task(tid, title=new_title, description=new_desc, status=new_status, deadline_str=new_deadline)
+                print(f"Task updated: {t.title}")
+            elif sub == "status":
+                if len(args) < 4:
+                    print("Usage: task status <project_id> <task_id> <status>")
+                    return
+                tid, status = args[2], args[3]
+                t = self.task_service.update_task(tid, status=status)
+                print("Task status changed.")
+            elif sub == "delete":
+                if len(args) < 3:
+                    print("Usage: task delete <project_id> <task_id>")
+                    return
+                confirm = input("Are you sure? (y/N): ").lower()
+                if confirm == "y":
+                    self.task_service.delete_task(args[2])
+                    print("Task deleted.")
+            else:
+                print("Unknown task command.")
+        except ToDoAppError as e:
+            print(f"Error: {e}")
 
 
 if __name__ == "__main__":
