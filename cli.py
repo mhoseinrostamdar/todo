@@ -171,6 +171,45 @@ class CLI:
                         'deadline': t[4]
                     })
 
+            elif sub == "edit":
+                if len(args) < 2:
+                    print("Usage: project edit <id>")
+                    return
+                project_id = args[1]
+
+                # Check if project exists
+                result = self.db.execute(text("SELECT id, name, description FROM projects WHERE id = :id"), {"id": project_id})
+                project = result.fetchone()
+                if not project:
+                    print("Project not found.")
+                    return
+
+                current_name, current_desc = project[1], project[2]
+
+                # Get new values
+                new_name = input(f"New name (current: {current_name}, press Enter to keep): ").strip() or current_name
+                new_desc = input(f"New description (current: {current_desc}, press Enter to keep): ").strip()
+
+                # Validate new name
+                if new_name != current_name:
+                    result = self.db.execute(text("SELECT id FROM projects WHERE name = :name AND id != :id"), {"name": new_name, "id": project_id})
+                    if result.fetchone():
+                        print("Error: Project name already exists.")
+                        return
+
+                # Update project
+                self.db.execute(text("""
+                    UPDATE projects SET name = :name, description = :desc, updated_at = :now
+                    WHERE id = :id
+                """), {
+                    "name": new_name,
+                    "desc": new_desc,
+                    "now": datetime.utcnow(),
+                    "id": project_id
+                })
+                self.db.commit()
+                print("Project updated.")
+
             elif sub == "delete":
                 if len(args) < 2:
                     print("Usage: project delete <id>")
@@ -276,6 +315,63 @@ class CLI:
                         'status': t[3],
                         'deadline': t[4]
                     })
+
+            elif sub == "edit":
+                if len(args) < 3:
+                    print("Usage: task edit <project_id> <task_id>")
+                    return
+                project_id, task_id = args[1], args[2]
+
+                # Check if task exists
+                result = self.db.execute(text("SELECT id, title, description, status, deadline FROM tasks WHERE id = :id AND project_id = :pid"), {"id": task_id, "pid": project_id})
+                task = result.fetchone()
+                if not task:
+                    print("Task not found.")
+                    return
+
+                current_title, current_desc, current_status, current_deadline = task[1], task[2], task[3], task[4]
+
+                # Get new values
+                new_title = input(f"New title (current: {current_title}, press Enter to keep): ").strip() or current_title
+                new_desc = input(f"New description (current: {current_desc}, press Enter to keep): ").strip()
+                new_status = input(f"New status (current: {current_status}, todo/doing/done, press Enter to keep): ").strip() or current_status
+                new_deadline_str = input(f"New deadline (current: {current_deadline.strftime('%Y-%m-%d') if current_deadline else 'None'}, YYYY-MM-DD, press Enter to keep): ").strip()
+
+                # Validate inputs
+                if not new_title:
+                    print("Error: Task title cannot be empty.")
+                    return
+
+                if new_status not in ['todo', 'doing', 'done']:
+                    print("Error: Status must be todo, doing, or done.")
+                    return
+
+                new_deadline = current_deadline
+                if new_deadline_str:
+                    if new_deadline_str.lower() in ['none', 'null', '']:
+                        new_deadline = None
+                    else:
+                        try:
+                            new_deadline = datetime.strptime(new_deadline_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            print("Error: Invalid date format. Use YYYY-MM-DD.")
+                            return
+
+                # Update task
+                self.db.execute(text("""
+                    UPDATE tasks SET title = :title, description = :desc, status = :status, deadline = :deadline, updated_at = :now
+                    WHERE id = :id AND project_id = :pid
+                """), {
+                    "title": new_title,
+                    "desc": new_desc,
+                    "status": new_status,
+                    "deadline": new_deadline,
+                    "now": datetime.utcnow(),
+                    "id": task_id,
+                    "pid": project_id
+                })
+                self.db.commit()
+                print("Task updated.")
 
             elif sub == "status":
                 if len(args) < 4:
