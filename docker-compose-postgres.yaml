@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15  # Use specific version instead of 'latest'
+    container_name: postgres_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: myapp_db        # Default database name
+      POSTGRES_USER: myapp_user    # Default user
+      POSTGRES_PASSWORD: mysecretpassword  # Change this in production!
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Persistent storage
+      - ./init-scripts:/docker-entrypoint-initdb.d  # Optional init scripts
+    ports:
+      - "5432:5432"  # Host:Container port mapping
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myapp_user -d myapp_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # Security best practices
+    # user: "1000:1000"  # Uncomment to run as non-root user
+    # read_only: true      # Uncomment if you have separate write volumes
+
+volumes:
+  postgres_data:  # Named volume for data persistence
+
+networks:
+  app-network:
+    driver: bridge
