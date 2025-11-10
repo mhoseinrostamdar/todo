@@ -6,6 +6,7 @@ import textwrap
 from datetime import datetime
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+import uuid
 
 # Database setup
 DATABASE_URL = "postgresql+psycopg2://myapp_user:mysecretpassword@localhost:5432/myapp_db"
@@ -107,10 +108,12 @@ class CLI:
                     return
 
                 # Create project
+                project_id = str(uuid.uuid4())
                 self.db.execute(text("""
-                    INSERT INTO projects (name, description, created_at, updated_at)
-                    VALUES (:name, :desc, :now, :now)
+                    INSERT INTO projects (id, name, description, created_at, updated_at)
+                    VALUES (:id, :name, :desc, :now, :now)
                 """), {
+                    "id": project_id,
                     "name": name,
                     "desc": desc,
                     "now": datetime.utcnow()
@@ -228,10 +231,12 @@ class CLI:
                         return
 
                 # Create task
+                task_id = str(uuid.uuid4())
                 self.db.execute(text("""
-                    INSERT INTO tasks (title, description, status, deadline, project_id, created_at, updated_at)
-                    VALUES (:title, :desc, :status, :deadline, :project_id, :now, :now)
+                    INSERT INTO tasks (id, title, description, status, deadline, project_id, created_at, updated_at)
+                    VALUES (:id, :title, :desc, :status, :deadline, :project_id, :now, :now)
                 """), {
+                    "id": task_id,
                     "title": title,
                     "desc": desc,
                     "status": status,
