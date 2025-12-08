@@ -16,6 +16,16 @@ def create_app() -> FastAPI:
         redoc_url="/api/v1/redoc",
     )
     app.state.settings = settings
+    # Helpful root endpoint to point users to documentation.
+    @app.get("/", tags=["Meta"])
+    def root():
+        return {
+            "status": "ok",
+            "message": "ToDoList API",
+            "docs": "/api/v1/docs",
+            "openapi": "/api/v1/openapi.json",
+        }
+
     app.include_router(api_router)
     return app
 

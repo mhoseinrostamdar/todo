@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import List
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 load_dotenv()
 
@@ -26,9 +26,10 @@ class Settings(BaseModel):
             return value
         return [item.strip() for item in value.split(",") if item.strip()]
 
-    class Config:
-        allow_population_by_field_name = True
-        frozen = True
+    model_config = ConfigDict(
+        populate_by_name=True,
+        frozen=True,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -42,4 +43,3 @@ def get_settings() -> Settings:
         DESC_MAX=int(os.getenv("DESC_MAX", "150")),
         STATUS_VALUES=os.getenv("STATUS_VALUES", "todo,doing,done"),
     )
-
