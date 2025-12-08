@@ -1,5 +1,6 @@
 """FastAPI entrypoint for the ToDoList Web API (Phase 3)."""
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
 from app.api.routers import api_router
 from app.core.config import get_settings
@@ -25,6 +26,10 @@ def create_app() -> FastAPI:
             "docs": "/api/v1/docs",
             "openapi": "/api/v1/openapi.json",
         }
+
+    @app.get("/docs", include_in_schema=False)
+    def docs_redirect():
+        return RedirectResponse(url="/api/v1/docs")
 
     app.include_router(api_router)
     return app
