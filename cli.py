@@ -421,4 +421,4 @@ class CLI:
 
 
 if __name__ == "__main__":
-    CLI().run()
+    raise SystemExit("CLI is deprecated in phase 3. Please run the FastAPI server instead.")
